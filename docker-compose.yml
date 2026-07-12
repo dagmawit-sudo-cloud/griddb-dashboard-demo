@@ -1,0 +1,40 @@
+version: "3.8"
+
+services:
+  griddb-server:
+    image: griddbnet/griddb
+    container_name: griddb-server
+    ports:
+      - "11001:10001"
+      - "11010:10010"
+      - "11020:10020"
+      - "11030:10030"
+      - "11040:10040"
+      - "11050:10050"
+      - "21001:20001"
+    networks:
+      - griddb-net
+
+  java-app:
+    build:
+      context: ./app
+    container_name: griddb-java-app
+    depends_on:
+      - griddb-server
+    ports:
+      - "8080:8080"
+    environment:
+      - GRIDDB_NOTIFICATION_MEMBER=griddb-server:10001
+      - GRIDDB_CLUSTER_NAME=dockerGridDB
+      - GRIDDB_USER=admin
+      - GRIDDB_PASSWORD=admin
+      # Optional tuning - safe to omit, these match the code's built-in defaults:
+      - DASHBOARD_PORT=8080
+      - GRIDDB_ANALYSIS_WINDOW_HOURS=24
+      - GRIDDB_ALERT_THRESHOLD=27.5
+    networks:
+      - griddb-net
+
+networks:
+  griddb-net:
+    driver: bridge

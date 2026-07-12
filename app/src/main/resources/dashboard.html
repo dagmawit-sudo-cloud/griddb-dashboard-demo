@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Factory Floor Monitoring — GridDB</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0A0E12;
+    --panel: #131A22;
+    --panel-raised: #171F28;
+    --border: #24303B;
+    --text-primary: #E7ECF1;
+    --text-muted: #6E7B87;
+    --text-dim: #4A5560;
+    --teal: #2DD4BF;
+    --amber: #F5A623;
+    --red: #EF4444;
+    --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+    --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    background-image:
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0px, rgba(255,255,255,0.012) 1px, transparent 1px, transparent 3px);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    min-height: 100vh;
+    padding: 0 0 48px 0;
+  }
+
+  a { color: var(--teal); }
+
+  /* ---------- Header / alarm strip ---------- */
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 28px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #10151B 0%, var(--bg) 100%);
+    flex-wrap: wrap;
+  }
+
+  .site-id {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .site-id .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+
+  .site-id h1 {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 18px;
+    letter-spacing: 0.02em;
+    margin: 0;
+    color: var(--text-primary);
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .clock {
+    color: var(--text-primary);
+    letter-spacing: 0.05em;
+    min-width: 90px;
+  }
+
+  .conn-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--teal);
+    margin-right: 7px;
+    box-shadow: 0 0 6px var(--teal);
+  }
+
+  .conn-dot.down {
+    background: var(--red);
+    box-shadow: 0 0 6px var(--red);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .conn-dot.live { animation: pulse 2.4s ease-in-out infinite; }
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.45; }
+  }
+
+  .alarm-badge {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 4px 11px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    background: var(--panel);
+  }
+  .alarm-badge.active {
+    color: var(--red);
+    border-color: rgba(239,68,68,0.35);
+    background: rgba(239,68,68,0.08);
+  }
+
+  /* ---------- Layout ---------- */
+
+  main {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 28px;
+  }
+
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin: 0 0 14px 2px;
+  }
+
+  .device-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 16px;
+    margin-bottom: 40px;
+  }
+
+  /* ---------- Device panel ---------- */
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px 22px;
+  }
+
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+  }
+
+  .device-tag {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    color: var(--text-primary);
+    text-transform: uppercase;
+  }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 3px;
+  }
+
+  .status-pill .led {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  .status-normal  { color: var(--teal);  background: rgba(45,212,191,0.10); }
+  .status-normal .led  { background: var(--teal);  box-shadow: 0 0 5px var(--teal); }
+  .status-warning { color: var(--amber); background: rgba(245,166,35,0.10); }
+  .status-warning .led { background: var(--amber); box-shadow: 0 0 5px var(--amber); }
+  .status-alarm   { color: var(--red);   background: rgba(239,68,68,0.12); }
+  .status-alarm .led   { background: var(--red);   box-shadow: 0 0 5px var(--red); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .status-alarm .led { animation: pulse 1.1s ease-in-out infinite; }
+  }
+
+  .readout {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 40px;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    margin-bottom: 4px;
+  }
+
+  .readout .unit { font-size: 20px; font-weight: 500; color: var(--text-muted); margin-left: 2px; }
+
+  .readout-label {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 18px;
+  }
+
+  /* ---------- Signature element: range gauge ---------- */
+
+  .gauge-wrap { margin-bottom: 14px; }
+
+  .gauge-track {
+    position: relative;
+    height: 6px;
+    border-radius: 3px;
+    background: #1C242D;
+    overflow: visible;
+  }
+
+  .gauge-range {
+    position: absolute;
+    top: 0; height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, rgba(45,212,191,0.25), rgba(245,166,35,0.30));
+  }
+
+  .gauge-marker {
+    position: absolute;
+    top: -4px;
+    width: 3px;
+    height: 14px;
+    border-radius: 2px;
+    background: var(--text-primary);
+    box-shadow: 0 0 6px rgba(255,255,255,0.5);
+    transform: translateX(-50%);
+  }
+
+  .gauge-threshold {
+    position: absolute;
+    top: -6px;
+    width: 1px;
+    height: 18px;
+    background: rgba(239,68,68,0.55);
+  }
+
+  .gauge-labels {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--text-dim);
+    margin-top: 7px;
+  }
+
+  .panel-foot {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ---------- Alarm log ---------- */
+
+  .log-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .log-row {
+    display: grid;
+    grid-template-columns: 96px 170px 1fr 110px;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 20px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    border-bottom: 1px solid var(--border);
+    border-left: 2px solid transparent;
+  }
+  .log-row:last-child { border-bottom: none; }
+  .log-row.alarm { border-left-color: var(--red); background: rgba(239,68,68,0.04); }
+
+  .log-row .time { color: var(--text-muted); }
+  .log-row .device { color: var(--text-primary); font-weight: 500; text-transform: uppercase; }
+  .log-row .msg { color: var(--text-muted); }
+  .log-row .val { color: var(--red); font-weight: 600; text-align: right; }
+
+  .log-empty {
+    padding: 32px 20px;
+    text-align: center;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+  }
+  .log-empty .ok-led {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--teal);
+    box-shadow: 0 0 5px var(--teal);
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+
+  footer {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 28px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  /* focus visibility */
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="site-id">
+    <span class="eyebrow">GridDB /</span>
+    <h1>Factory Floor Monitoring</h1>
+  </div>
+  <div class="header-right">
+    <span><span class="conn-dot live" id="connDot"></span><span id="connLabel">Live</span></span>
+    <span class="clock" id="clock">--:--:--</span>
+    <span class="alarm-badge" id="alarmBadge">0 active alarms</span>
+  </div>
+</header>
+
+<main>
+  <p class="section-label">Sensor Array</p>
+  <div class="device-grid" id="deviceGrid">
+    <!-- panels injected by JS -->
+  </div>
+
+  <p class="section-label">Alarm Log</p>
+  <div class="log-panel" id="logPanel">
+    <div class="log-empty"><span class="ok-led"></span>No alarms recorded yet.</div>
+  </div>
+</main>
+
+<footer>
+  Data source: GridDB TimeSeries containers · refreshed every 5s · threshold 27.5&deg;C
+</footer>
+
+<script>
+  const ALERT_THRESHOLD = 27.5;   // mirrors GRIDDB_ALERT_THRESHOLD default
+  const WARNING_MARGIN = 2.0;     // °C below threshold that counts as "elevated"
+  const GAUGE_SCALE_MIN = 10;
+  const GAUGE_SCALE_MAX = 35;
+
+  const grid = document.getElementById('deviceGrid');
+  const logPanel = document.getElementById('logPanel');
+  const alarmBadge = document.getElementById('alarmBadge');
+  const connDot = document.getElementById('connDot');
+  const connLabel = document.getElementById('connLabel');
+  const clockEl = document.getElementById('clock');
+
+  function pct(value) {
+    const clamped = Math.min(Math.max(value, GAUGE_SCALE_MIN), GAUGE_SCALE_MAX);
+    return ((clamped - GAUGE_SCALE_MIN) / (GAUGE_SCALE_MAX - GAUGE_SCALE_MIN)) * 100;
+  }
+
+  function statusFor(stat, alertCount) {
+    if (alertCount > 0) return { cls: 'status-alarm', label: 'Alarm' };
+    if (stat.avg >= ALERT_THRESHOLD - WARNING_MARGIN) return { cls: 'status-warning', label: 'Elevated' };
+    return { cls: 'status-normal', label: 'Normal' };
+  }
+
+  function renderDevices(stats, alertsByDevice) {
+    grid.innerHTML = stats.map(s => {
+      const deviceAlerts = alertsByDevice[s.deviceId] || [];
+      const status = statusFor(s, deviceAlerts.length);
+      const rangeLeft = pct(s.min);
+      const rangeWidth = Math.max(pct(s.max) - rangeLeft, 1.5);
+
+      return `
+        <div class="panel">
+          <div class="panel-head">
+            <span class="device-tag">${s.deviceId.replace(/_/g, '-')}</span>
+            <span class="status-pill ${status.cls}"><span class="led"></span>${status.label}</span>
+          </div>
+
+          <div class="readout">${s.avg.toFixed(1)}<span class="unit">&deg;C</span></div>
+          <div class="readout-label">24H Rolling Average</div>
+
+          <div class="gauge-wrap">
+            <div class="gauge-track">
+              <div class="gauge-range" style="left:${rangeLeft}%; width:${rangeWidth}%;"></div>
+              <div class="gauge-threshold" style="left:${pct(ALERT_THRESHOLD)}%;"></div>
+              <div class="gauge-marker" style="left:${pct(s.avg)}%;"></div>
+            </div>
+            <div class="gauge-labels">
+              <span>${s.min.toFixed(1)}&deg;</span>
+              <span>${s.max.toFixed(1)}&deg;</span>
+            </div>
+          </div>
+
+          <div class="panel-foot">
+            <span>${s.count} readings / 24h</span>
+            <span>${deviceAlerts.length} alarm${deviceAlerts.length === 1 ? '' : 's'}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function renderLog(alerts) {
+    if (alerts.length === 0) {
+      logPanel.innerHTML = '<div class="log-empty"><span class="ok-led"></span>No alarms recorded yet.</div>';
+      return;
+    }
+    logPanel.innerHTML = alerts.slice(0, 25).map(a => `
+      <div class="log-row alarm">
+        <span class="time">${new Date(a.timestamp).toLocaleTimeString()}</span>
+        <span class="device">${a.deviceId.replace(/_/g, '-')}</span>
+        <span class="msg">Threshold exceeded</span>
+        <span class="val">${a.temperature.toFixed(2)}&deg;C</span>
+      </div>
+    `).join('');
+  }
+
+  async function refresh() {
+    try {
+      const stats = await (await fetch('/api/stats')).json();
+      const alerts = await (await fetch('/api/alerts')).json();
+
+      const alertsByDevice = {};
+      alerts.forEach(a => {
+        (alertsByDevice[a.deviceId] = alertsByDevice[a.deviceId] || []).push(a);
+      });
+      // most recent first for the log
+      alerts.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+      renderDevices(stats, alertsByDevice);
+      renderLog(alerts);
+
+      alarmBadge.textContent = alerts.length + ' active alarm' + (alerts.length === 1 ? '' : 's');
+      alarmBadge.classList.toggle('active', alerts.length > 0);
+
+      connDot.classList.remove('down');
+      connDot.classList.add('live');
+      connLabel.textContent = 'Live';
+    } catch (e) {
+      connDot.classList.remove('live');
+      connDot.classList.add('down');
+      connLabel.textContent = 'Reconnecting…';
+    }
+  }
+
+  function tickClock() {
+    clockEl.textContent = new Date().toLocaleTimeString();
+  }
+
+  tickClock();
+  setInterval(tickClock, 1000);
+  refresh();
+  setInterval(refresh, 5000);
+</script>
+
+</body>
+</html>
