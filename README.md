@@ -270,9 +270,6 @@ The article explains the complete architecture, implementation details, and desi
 
 # References
 
-- GridDB Documentation  
-  https://griddb.org/docs/
-
 - GridDB Java Client Documentation  
   https://www.griddb.net/en/resources/griddb-java-api-reference/
 
